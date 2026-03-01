@@ -11,7 +11,7 @@ import SiteDetailModal from './components/SiteDetailModal'
 import SiteCard from './components/SiteCard'
 import UploadPanel from './components/UploadPanel'
 import { supabase } from './lib/supabaseClient'
-import { createSite, fetchSites } from './lib/api'
+import { createSite, fetchSites, uploadScreenshots } from './lib/api'
 
 export type Site = {
   id: string
@@ -27,6 +27,7 @@ export type Site = {
   createdAt?: string | null
   screenshotUrl?: string | null
   screenshotStatus?: string | null
+  screenshots?: string[]
 }
 
 const filters = ['All', 'Portfolio', 'SaaS', 'Agency', 'Ecommerce', 'Blog', 'Tools']
@@ -43,6 +44,7 @@ type SiteRow = {
   owner_id: string | null
   screenshot_url?: string | null
   screenshot_status?: string | null
+  site_screenshots?: { url: string }[] | null
 }
 
   const getTrendLabel = (createdAt: string | null, reviews: number) => {
@@ -69,6 +71,7 @@ const mapSiteRow = (row: SiteRow): Site => ({
   createdAt: row.created_at,
   screenshotUrl: row.screenshot_url ?? null,
   screenshotStatus: row.screenshot_status ?? null,
+  screenshots: row.site_screenshots?.map((shot) => shot.url) ?? [],
 })
 
 function App() {
@@ -95,16 +98,23 @@ function App() {
     const loadSites = async () => {
       setIsLoading(true)
       setLoadError(null)
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(() => controller.abort(), 10000)
       try {
-        const response = await fetchSites()
+        const response = await fetchSites(undefined, undefined, { signal: controller.signal })
         if (!active) return
         const rows = (response.data ?? []) as SiteRow[]
         setSites(rows.map(mapSiteRow))
       } catch (error) {
         if (!active) return
-        setLoadError(error instanceof Error ? error.message : 'Failed to load sites.')
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          setLoadError('Loading sites timed out. Please try again.')
+        } else {
+          setLoadError(error instanceof Error ? error.message : 'Failed to load sites.')
+        }
         setSites([])
       } finally {
+        window.clearTimeout(timeoutId)
         if (active) setIsLoading(false)
       }
     }
@@ -140,12 +150,15 @@ function App() {
     [sites],
   )
 
-  const handleCreateSite = async (payload: {
-    name: string
-    url: string
-    description: string
-    tags: string[]
-  }) => {
+  const handleCreateSite = async (
+    payload: {
+      name: string
+      url: string
+      description: string
+      tags: string[]
+    },
+    screenshots?: File[],
+  ) => {
     if (!supabase) {
       throw new Error('Supabase is not configured.')
     }
@@ -157,6 +170,10 @@ function App() {
     const response = await createSite(payload, session.access_token)
     const newSite = mapSiteRow(response.data as SiteRow)
     setSites((prev) => [newSite, ...prev])
+
+    if (screenshots?.length) {
+      await uploadScreenshots(newSite.id, screenshots, session.access_token)
+    }
   }
 
   return (
@@ -249,7 +266,12 @@ function App() {
               <h2>Explore the latest uploads</h2>
               <p className="muted">Sort by category, search, or jump into trending picks.</p>
             </div>
-            <div className="pill muted">{filteredSites.length} results</div>
+            <div className="results-actions">
+              <div className="pill muted">{filteredSites.length} results</div>
+              <button className="button ghost" type="button" onClick={() => setIsSearchOpen(true)}>
+                Search
+              </button>
+            </div>
           </div>
           {isLoading ? (
             <div className="card">Loading sites...</div>

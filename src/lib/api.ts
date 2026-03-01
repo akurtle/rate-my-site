@@ -16,12 +16,28 @@ export type CreateReplyPayload = {
   comment: string
 }
 
-export async function fetchSites(query?: string, tag?: string) {
+export class ApiError extends Error {
+  fields?: string[]
+
+  constructor(message: string, fields?: string[]) {
+    super(message)
+    this.name = 'ApiError'
+    this.fields = fields
+  }
+}
+
+export async function fetchSites(
+  query?: string,
+  tag?: string,
+  options?: { signal?: AbortSignal },
+) {
   const params = new URLSearchParams()
   if (query) params.set('search', query)
   if (tag) params.set('tag', tag)
 
-  const response = await fetch(`${apiBaseUrl}/sites?${params.toString()}`)
+  const response = await fetch(`${apiBaseUrl}/sites?${params.toString()}`, {
+    signal: options?.signal,
+  })
   if (!response.ok) {
     throw new Error('Failed to fetch sites')
   }
@@ -47,7 +63,7 @@ export async function createSite(payload: CreateSitePayload, accessToken: string
   })
   if (!response.ok) {
     const errorBody = await safeParseError(response)
-    throw new Error(errorBody)
+    throw new ApiError(errorBody.message, errorBody.fields)
   }
   return response.json()
 }
@@ -67,25 +83,25 @@ export async function createRating(siteId: string, payload: CreateRatingPayload,
   return response.json()
 }
 
-async function safeParseError(response: Response) {
+async function safeParseError(response: Response): Promise<{ message: string; fields?: string[] }> {
   try {
     const body = await response.json()
     if (body?.error?.fieldErrors) {
       const fields = Object.keys(body.error.fieldErrors)
       if (fields.length) {
-        return `Invalid fields: ${fields.join(', ')}`
+        return { message: `Invalid fields: ${fields.join(', ')}`, fields }
       }
     }
     if (body?.error?.formErrors?.length) {
-      return body.error.formErrors.join(', ')
+      return { message: body.error.formErrors.join(', ') }
     }
     if (typeof body?.error === 'string') {
-      return body.error
+      return { message: body.error }
     }
   } catch {
     // ignore
   }
-  return 'Failed to create site'
+  return { message: 'Failed to create site' }
 }
 
 export async function createReply(ratingId: string, payload: CreateReplyPayload, accessToken: string) {
@@ -99,6 +115,28 @@ export async function createReply(ratingId: string, payload: CreateReplyPayload,
   })
   if (!response.ok) {
     throw new Error('Failed to submit reply')
+  }
+  return response.json()
+}
+
+export async function uploadScreenshots(
+  siteId: string,
+  files: File[],
+  accessToken: string,
+) {
+  const formData = new FormData()
+  files.forEach((file) => formData.append('screenshots', file))
+
+  const response = await fetch(`${apiBaseUrl}/sites/${siteId}/screenshots`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: formData,
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to upload screenshots')
   }
   return response.json()
 }

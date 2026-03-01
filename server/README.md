@@ -19,3 +19,4 @@ npm run dev
 - `POST /sites/:id/ratings` (auth required)
 - `POST /ratings/:id/replies` (auth required)
 - `POST /sites/:id/screenshot` (auth required, owner only)
+- `POST /sites/:id/screenshots` (auth required, owner only, multipart)

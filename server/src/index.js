@@ -3,6 +3,7 @@ import cors from 'cors'
 import express from 'express'
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import multer from 'multer'
 import {
   cacheBumpVersion,
   cacheDel,
@@ -65,6 +66,10 @@ const listTtl = Number(process.env.CACHE_SITES_TTL || 60)
 const siteTtl = Number(process.env.CACHE_SITE_TTL || 120)
 const ratingsTtl = Number(process.env.CACHE_RATINGS_TTL || 30)
 const screenshotBucket = process.env.SCREENSHOT_BUCKET || 'site-screenshots'
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 6 },
+})
 
 const buildListCacheKey = (version, search, tag, sort) => {
   const safe = (value) => encodeURIComponent(value ?? 'all')
@@ -115,7 +120,7 @@ app.get('/sites', async (req, res) => {
 
   let query = supabase
     .from('sites')
-    .select('id,name,url,description,tags,avg_rating,rating_count,created_at,owner_id,screenshot_url,screenshot_status,screenshot_updated_at')
+    .select('id,name,url,description,tags,avg_rating,rating_count,created_at,owner_id,screenshot_url,screenshot_status,screenshot_updated_at,site_screenshots(url,source,created_at)')
 
   if (search) {
     query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`)
@@ -154,7 +159,7 @@ app.get('/sites/:id', async (req, res) => {
 
   const { data, error } = await supabase
     .from('sites')
-    .select('id,name,url,description,tags,avg_rating,rating_count,created_at,owner_id,screenshot_url,screenshot_status,screenshot_updated_at')
+    .select('id,name,url,description,tags,avg_rating,rating_count,created_at,owner_id,screenshot_url,screenshot_status,screenshot_updated_at,site_screenshots(url,source,created_at)')
     .eq('id', id)
     .single()
 
@@ -280,6 +285,77 @@ app.post('/sites/:id/screenshot', requireAuth, async (req, res) => {
   }
 })
 
+app.post('/sites/:id/screenshots', requireAuth, upload.array('screenshots', 6), async (req, res) => {
+  if (!requireSupabase(res)) return
+  const { id } = req.params
+  const { data: siteRow, error: siteError } = await supabase
+    .from('sites')
+    .select('id,url,owner_id')
+    .eq('id', id)
+    .single()
+
+  if (siteError || !siteRow) {
+    return res.status(404).json({ error: 'Site not found.' })
+  }
+  if (siteRow.owner_id && siteRow.owner_id !== req.user.id) {
+    return res.status(403).json({ error: 'Not allowed.' })
+  }
+
+  const files = req.files ?? []
+  if (!files.length) {
+    return res.status(400).json({ error: 'No files uploaded.' })
+  }
+
+  const uploads = []
+  for (const file of files) {
+    if (!file.mimetype.startsWith('image/')) continue
+    const ext = file.mimetype === 'image/png' ? 'png' : 'jpg'
+    const filePath = `sites/${id}/manual/${Date.now()}-${Math.round(Math.random() * 1e6)}.${ext}`
+    const { error: uploadError } = await supabase.storage
+      .from(screenshotBucket)
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true,
+      })
+
+    if (uploadError) {
+      return res.status(500).json({ error: uploadError.message })
+    }
+
+    const { data: publicUrlData } = supabase.storage.from(screenshotBucket).getPublicUrl(filePath)
+    const publicUrl = publicUrlData?.publicUrl
+    if (publicUrl) {
+      uploads.push(publicUrl)
+    }
+  }
+
+  if (!uploads.length) {
+    return res.status(400).json({ error: 'No valid images uploaded.' })
+  }
+
+  const rows = uploads.map((url) => ({ site_id: id, url, source: 'manual' }))
+  const { data, error } = await supabase.from('site_screenshots').insert(rows).select()
+  if (error) {
+    return res.status(500).json({ error: error.message })
+  }
+
+  await supabase
+    .from('sites')
+    .update({
+      screenshot_url: uploads[0],
+      screenshot_status: 'ready',
+      screenshot_updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+
+  if (cacheEnabled) {
+    await cacheDel(`cache:site:${id}`)
+    await cacheBumpVersion(listVersionKey)
+  }
+
+  res.status(201).json({ data })
+})
+
 app.post('/ratings/:id/replies', requireAuth, async (req, res) => {
   if (!requireSupabase(res)) return
   const parseResult = replySchema.safeParse(req.body)
@@ -364,6 +440,13 @@ async function captureAndStoreScreenshot(siteId, siteUrl) {
 
   if (error) {
     throw error
+  }
+  if (publicUrl) {
+    await supabase.from('site_screenshots').insert({
+      site_id: siteId,
+      url: publicUrl,
+      source: 'auto',
+    })
   }
   if (cacheEnabled) {
     await cacheDel(`cache:site:${siteId}`)

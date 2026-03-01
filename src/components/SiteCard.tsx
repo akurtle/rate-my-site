@@ -7,8 +7,18 @@ type SiteCardProps = {
 }
 
 function SiteCard({ site, onVisit, onRate }: SiteCardProps) {
+  const previewImage = site.screenshotUrl || site.screenshots?.[0]
   return (
     <article className="card site-card">
+      <div className="site-preview">
+        {previewImage ? (
+          <img src={previewImage} alt={`${site.name} preview`} />
+        ) : (
+          <div className="site-preview-placeholder">
+            <span className="muted">No preview yet</span>
+          </div>
+        )}
+      </div>
       <div className="site-card-top">
         <div>
           <h3>{site.name}</h3>

@@ -36,6 +36,14 @@ create table if not exists public.comment_replies (
   created_at timestamptz default now()
 );
 
+create table if not exists public.site_screenshots (
+  id uuid primary key default gen_random_uuid(),
+  site_id uuid references public.sites on delete cascade,
+  url text not null,
+  source text default 'manual',
+  created_at timestamptz default now()
+);
+
 create table if not exists public.favorites (
   id uuid primary key default gen_random_uuid(),
   site_id uuid references public.sites on delete cascade,
@@ -48,6 +56,7 @@ alter table public.sites enable row level security;
 alter table public.ratings enable row level security;
 alter table public.favorites enable row level security;
 alter table public.comment_replies enable row level security;
+alter table public.site_screenshots enable row level security;
 
 create policy "Sites are viewable by everyone"
   on public.sites for select
@@ -80,6 +89,22 @@ create policy "Authenticated users can reply"
   on public.comment_replies for insert
   to authenticated
   with check (auth.uid() = user_id);
+
+create policy "Screenshots are viewable by everyone"
+  on public.site_screenshots for select
+  using (true);
+
+create policy "Authenticated users can upload screenshots"
+  on public.site_screenshots for insert
+  to authenticated
+  with check (
+    exists (
+      select 1
+      from public.sites s
+      where s.id = site_id
+        and s.owner_id = auth.uid()
+    )
+  );
 
 create policy "Favorites are viewable by owners"
   on public.favorites for select
@@ -117,3 +142,4 @@ for each row execute function public.recalculate_site_rating();
 create index if not exists sites_tags_idx on public.sites using gin (tags);
 create index if not exists favorites_user_idx on public.favorites (user_id);
 create index if not exists favorites_site_idx on public.favorites (site_id);
+create index if not exists site_screenshots_site_idx on public.site_screenshots (site_id);

@@ -105,7 +105,14 @@ function SiteDetailModal({ site, onClose }: SiteDetailModalProps) {
     }
   }, [site])
 
-  const images = site?.screenshotUrl ? [site.screenshotUrl] : []
+  const images = site
+    ? Array.from(
+        new Set([
+          ...(site.screenshots ?? []),
+          ...(site.screenshotUrl ? [site.screenshotUrl] : []),
+        ]),
+      )
+    : []
   const activeImage = images[activeIndex]
   const screenshotStatus = site?.screenshotStatus
 
