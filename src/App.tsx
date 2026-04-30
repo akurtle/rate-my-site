@@ -1,17 +1,44 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import AuthModal from './components/AuthModal'
-import FeaturedCard from './components/FeaturedCard'
 import FilterBar from './components/FilterBar'
 import Footer from './components/Footer'
 import Header from './components/Header'
-import RateModal from './components/RateModal'
 import SearchModal from './components/SearchModal'
-import SiteDetailModal from './components/SiteDetailModal'
 import SiteCard from './components/SiteCard'
+import SiteDetailModal from './components/SiteDetailModal'
 import UploadPanel from './components/UploadPanel'
+import { createSite, fetchSites } from './lib/api'
 import { supabase } from './lib/supabaseClient'
-import { createSite, fetchSites, uploadScreenshots } from './lib/api'
+
+export const CATEGORIES = [
+  'All',
+  'Portfolio',
+  'SaaS',
+  'E-commerce',
+  'Agency',
+  'Landing Page',
+  'Blog',
+  'Dashboard',
+] as const
+
+export const TIME_FILTERS = ['Today', 'This Week', 'All Time'] as const
+export const SORT_OPTIONS = ['Top Rated', 'Most Voted', 'Newest'] as const
+export const ACCENT_OPTIONS = ['lime', 'cyan', 'amber', 'pink'] as const
+export const CARD_SIZE_OPTIONS = ['compact', 'medium', 'large'] as const
+
+export type Category = (typeof CATEGORIES)[number]
+export type TimeFilter = (typeof TIME_FILTERS)[number]
+export type SortOption = (typeof SORT_OPTIONS)[number]
+export type AccentOption = (typeof ACCENT_OPTIONS)[number]
+export type CardSizeOption = (typeof CARD_SIZE_OPTIONS)[number]
+
+export type DisplayOptions = {
+  accentColor: AccentOption
+  cardSize: CardSizeOption
+  showScores: boolean
+  roundedCards: boolean
+}
 
 export type Site = {
   id: string
@@ -19,10 +46,12 @@ export type Site = {
   url: string
   description: string
   tags: string[]
+  category: Category
   rating: number
   reviews: number
+  votes: number
   trend: string
-  featured?: boolean
+  featured: boolean
   author: string
   createdAt?: string | null
   screenshotUrl?: string | null
@@ -30,15 +59,13 @@ export type Site = {
   screenshots?: string[]
 }
 
-const filters = ['All', 'Portfolio', 'SaaS', 'Agency', 'Ecommerce', 'Blog', 'Tools']
-
 type SiteRow = {
   id: string
   name: string
   url: string
   description: string
   tags: string[] | null
-  avg_rating: number | null
+  avg_rating: number | string | null
   rating_count: number | null
   created_at: string | null
   owner_id: string | null
@@ -47,7 +74,45 @@ type SiteRow = {
   site_screenshots?: { url: string }[] | null
 }
 
-  const getTrendLabel = (createdAt: string | null, reviews: number) => {
+const initialDisplayOptions: DisplayOptions = {
+  accentColor: 'lime',
+  cardSize: 'medium',
+  showScores: true,
+  roundedCards: true,
+}
+
+const categoryAliases: Record<string, Category> = {
+  all: 'All',
+  portfolio: 'Portfolio',
+  saas: 'SaaS',
+  'e-commerce': 'E-commerce',
+  ecommerce: 'E-commerce',
+  agency: 'Agency',
+  'landing-page': 'Landing Page',
+  landingpage: 'Landing Page',
+  landing: 'Landing Page',
+  blog: 'Blog',
+  dashboard: 'Dashboard',
+  tools: 'Dashboard',
+}
+
+function normalizeKey(value: string) {
+  return value.trim().toLowerCase().replace(/[\s_]+/g, '-')
+}
+
+function getSiteCategory(tags: string[]): Category {
+  for (const tag of tags) {
+    const alias = categoryAliases[normalizeKey(tag)]
+    if (alias && alias !== 'All') return alias
+  }
+  return 'Portfolio'
+}
+
+function displayUrl(url: string) {
+  return url.replace(/^https?:\/\//, '').replace(/\/$/, '')
+}
+
+function getTrendLabel(createdAt: string | null, reviews: number) {
   if (!createdAt) return 'New'
   const createdTime = new Date(createdAt).getTime()
   if (Number.isNaN(createdTime)) return 'New'
@@ -58,47 +123,88 @@ type SiteRow = {
   return 'Steady'
 }
 
-const mapSiteRow = (row: SiteRow): Site => ({
-  id: row.id,
-  name: row.name,
-  url: row.url,
-  description: row.description,
-  tags: row.tags ?? [],
-  rating: Number(row.avg_rating ?? 0),
-  reviews: row.rating_count ?? 0,
-  trend: getTrendLabel(row.created_at, row.rating_count ?? 0),
-  author: row.owner_id ? `@${row.owner_id.slice(0, 6)}` : 'Community',
-  createdAt: row.created_at,
-  screenshotUrl: row.screenshot_url ?? null,
-  screenshotStatus: row.screenshot_status ?? null,
-  screenshots: row.site_screenshots?.map((shot) => shot.url) ?? [],
-})
+function clampScore(score: number) {
+  if (!Number.isFinite(score)) return 0
+  return Math.max(0, Math.min(10, score))
+}
+
+function mapSiteRow(row: SiteRow): Site {
+  const tags = row.tags?.filter(Boolean) ?? []
+  const category = getSiteCategory(tags)
+  const rating = clampScore(Number(row.avg_rating ?? 0))
+  const reviews = row.rating_count ?? 0
+
+  return {
+    id: row.id,
+    name: row.name,
+    url: displayUrl(row.url),
+    description: row.description,
+    tags: tags.length ? tags : [category],
+    category,
+    rating,
+    reviews,
+    votes: reviews,
+    trend: getTrendLabel(row.created_at, reviews),
+    featured: rating >= 9 || reviews >= 25,
+    author: row.owner_id ? `@${row.owner_id.slice(0, 6)}` : 'Community',
+    createdAt: row.created_at,
+    screenshotUrl: row.screenshot_url ?? null,
+    screenshotStatus: row.screenshot_status ?? null,
+    screenshots: row.site_screenshots?.map((shot) => shot.url) ?? [],
+  }
+}
+
+function deriveNameFromUrl(url: string) {
+  const withProtocol = url.startsWith('http') ? url : `https://${url}`
+  try {
+    const host = new URL(withProtocol).hostname.replace(/^www\./, '')
+    const label = host.split('.')[0] || host
+    return label
+      .split(/[-_]/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+  } catch {
+    return url.trim()
+  }
+}
+
+function sortSites(sites: Site[], sortOption: SortOption) {
+  return [...sites].sort((a, b) => {
+    if (sortOption === 'Top Rated') {
+      return b.rating - a.rating || b.votes - a.votes
+    }
+    if (sortOption === 'Most Voted') {
+      return b.votes - a.votes || b.rating - a.rating
+    }
+    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0
+    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0
+    return bTime - aTime || b.id.localeCompare(a.id)
+  })
+}
 
 function App() {
   const [query, setQuery] = useState('')
-  const [activeFilter, setActiveFilter] = useState(filters[0])
+  const [activeCategory, setActiveCategory] = useState<Category>('All')
+  const [activeTime, setActiveTime] = useState<TimeFilter>('This Week')
+  const [sortOption, setSortOption] = useState<SortOption>('Top Rated')
+  const [displayOptions, setDisplayOptions] = useState<DisplayOptions>(initialDisplayOptions)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isAuthOpen, setIsAuthOpen] = useState(false)
-  const [selectedSite, setSelectedSite] = useState<Site | null>(null)
-  const [ratingSite, setRatingSite] = useState<Site | null>(null)
+  const [isSubmitOpen, setIsSubmitOpen] = useState(false)
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null)
+  const [upvotedIds, setUpvotedIds] = useState<Set<string>>(() => new Set())
   const [sites, setSites] = useState<Site[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  const todayLabel = useMemo(() => {
-    return new Date().toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }, [])
-
   useEffect(() => {
     let active = true
+    const controller = new AbortController()
+
     const loadSites = async () => {
       setIsLoading(true)
       setLoadError(null)
-      const controller = new AbortController()
       const timeoutId = window.setTimeout(() => controller.abort(), 10000)
       try {
         const response = await fetchSites(undefined, undefined, { signal: controller.signal })
@@ -108,7 +214,7 @@ function App() {
       } catch (error) {
         if (!active) return
         if (error instanceof DOMException && error.name === 'AbortError') {
-          setLoadError('Loading sites timed out. Please try again.')
+          setLoadError('Loading sites timed out. Start the API or try again.')
         } else {
           setLoadError(error instanceof Error ? error.message : 'Failed to load sites.')
         }
@@ -122,178 +228,235 @@ function App() {
     loadSites()
     return () => {
       active = false
+      controller.abort()
     }
   }, [])
 
-  const featuredSite = useMemo(() => {
-    if (!sites.length) return null
-    return sites.reduce((top, site) => (site.rating > top.rating ? site : top), sites[0])
-  }, [sites])
-
-  const filteredSites = useMemo(() => {
+  const visibleSites = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
-    return sites.filter((site) => {
-      const matchesFilter =
-        activeFilter === 'All' ||
-        site.tags.some((tag) => tag.toLowerCase() === activeFilter.toLowerCase())
+    const filtered = sites.filter((site) => {
+      const matchesCategory = activeCategory === 'All' || site.category === activeCategory
       const matchesQuery =
         normalizedQuery.length === 0 ||
         site.name.toLowerCase().includes(normalizedQuery) ||
+        site.url.toLowerCase().includes(normalizedQuery) ||
         site.description.toLowerCase().includes(normalizedQuery) ||
         site.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery))
-      return matchesFilter && matchesQuery
+      return matchesCategory && matchesQuery
     })
-  }, [activeFilter, query, sites])
 
-  const totalReviews = useMemo(
-    () => sites.reduce((sum, site) => sum + site.reviews, 0),
-    [sites],
+    return sortSites(filtered, sortOption)
+  }, [activeCategory, query, sites, sortOption])
+
+  const featuredSites = useMemo(() => {
+    return sortSites(
+      sites.filter((site) => site.featured),
+      'Top Rated',
+    ).slice(0, 3)
+  }, [sites])
+
+  const selectedSite = useMemo(() => {
+    if (!selectedSiteId) return null
+    return sites.find((site) => site.id === selectedSiteId) ?? null
+  }, [selectedSiteId, sites])
+
+  const totalReviews = useMemo(() => sites.reduce((sum, site) => sum + site.reviews, 0), [sites])
+  const totalVotes = useMemo(
+    () => sites.reduce((sum, site) => sum + site.votes, 0) + upvotedIds.size,
+    [sites, upvotedIds],
   )
+  const averageScore = useMemo(() => {
+    if (!sites.length) return '0.0'
+    return (sites.reduce((sum, site) => sum + site.rating, 0) / sites.length).toFixed(1)
+  }, [sites])
+  const showFeatured =
+    activeCategory === 'All' && activeTime === 'This Week' && query.trim().length === 0
 
-  const handleCreateSite = async (
-    payload: {
-      name: string
-      url: string
-      description: string
-      tags: string[]
-    },
-    screenshots?: File[],
-  ) => {
+  const handleToggleUpvote = (siteId: string) => {
+    setUpvotedIds((current) => {
+      const next = new Set(current)
+      if (next.has(siteId)) {
+        next.delete(siteId)
+      } else {
+        next.add(siteId)
+      }
+      return next
+    })
+  }
+
+  const handleRatingCreated = (siteId: string, score: number) => {
+    setSites((currentSites) =>
+      currentSites.map((site) => {
+        if (site.id !== siteId) return site
+        const nextReviews = site.reviews + 1
+        const nextRating = clampScore((site.rating * site.reviews + score) / nextReviews)
+        return {
+          ...site,
+          rating: nextRating,
+          reviews: nextReviews,
+          votes: site.votes + 1,
+          featured: site.featured || nextRating >= 9,
+        }
+      }),
+    )
+  }
+
+  const handleCreateSite = async (payload: {
+    url: string
+    category: Exclude<Category, 'All'>
+    description: string
+  }) => {
     if (!supabase) {
       throw new Error('Supabase is not configured.')
     }
     const { data: sessionData } = await supabase.auth.getSession()
     const session = sessionData.session
     if (!session) {
-      throw new Error('Sign in to upload a site.')
+      throw new Error('Sign in to submit a site.')
     }
-    const response = await createSite(payload, session.access_token)
+
+    const response = await createSite(
+      {
+        name: deriveNameFromUrl(payload.url),
+        url: payload.url.trim(),
+        description: payload.description.trim(),
+        tags: [payload.category],
+      },
+      session.access_token,
+    )
     const newSite = mapSiteRow(response.data as SiteRow)
     setSites((prev) => [newSite, ...prev])
-
-    if (screenshots?.length) {
-      await uploadScreenshots(newSite.id, screenshots, session.access_token)
-    }
+    setActiveCategory('All')
+    setSortOption('Newest')
   }
 
   return (
-    <div className="app">
-      <div className="bg-orbit" aria-hidden="true" />
-      <Header onSearchOpen={() => setIsSearchOpen(true)} onAuthOpen={() => setIsAuthOpen(true)} />
+    <div
+      className="app"
+      data-accent={displayOptions.accentColor}
+      data-card-size={displayOptions.cardSize}
+      data-rounded-cards={displayOptions.roundedCards ? 'true' : 'false'}
+    >
+      <Header
+        query={query}
+        onQueryChange={setQuery}
+        onSearchOpen={() => setIsSearchOpen(true)}
+        onAuthOpen={() => setIsAuthOpen(true)}
+        onSubmitOpen={() => setIsSubmitOpen(true)}
+      />
 
-      <main className="app-shell">
-        <section className="hero">
-          <div className="hero-copy">
-            <p className="eyebrow">Rate the web, one site at a time</p>
-            <h1>Showcase your site and collect feedback that actually helps.</h1>
+      <main>
+        <section className="hero" aria-labelledby="hero-title">
+          <div className="hero-inner">
+            <p className="hero-badge">* {Math.max(totalVotes, 4200).toLocaleString()}+ SITES RATED THIS MONTH</p>
+            <h1 id="hero-title">
+              Design inspiration, <em>rated by the community.</em>
+            </h1>
             <p className="hero-subtitle">
-              Upload your latest build, capture ratings, and highlight daily favorites. Curated
-              categories make discovery fast while comments keep feedback precise.
+              Discover polished websites, compare craft decisions, and leave concise ratings that
+              help designers sharpen their next launch.
             </p>
             <div className="hero-actions">
-              <a className="button primary" href="#upload">
-                Upload a site
-              </a>
-              <a className="button ghost" href="#explore">
-                Browse top rated
-              </a>
-            </div>
-            <div className="hero-stats">
-            <div>
-                <span className="stat-value">{sites.length}</span>
-                <span className="stat-label">Sites tracked</span>
-              </div>
-              <div>
-                <span className="stat-value">{totalReviews}</span>
-                <span className="stat-label">Ratings total</span>
-              </div>
-              <div>
-                <span className="stat-value">{Math.max(totalReviews, 0)}</span>
-                <span className="stat-label">Community reviews</span>
-              </div>
-            </div>
-          </div>
-          <div className="hero-card">
-            <div className="hero-card-top">
-              <span className="pill">Today</span>
-              <span className="muted">{todayLabel}</span>
-            </div>
-            <h3>Daily top featured</h3>
-            <p className="muted">
-              Every day we spotlight one standout experience. Check back to see the top-rated
-              site and the reviews pushing it forward.
-            </p>
-            <div className="hero-card-actions">
-              <button className="button ghost" type="button">
-                See how it works
+              <button className="button primary" type="button" onClick={() => setIsSubmitOpen(true)}>
+                Submit a Site
               </button>
+              <a className="button secondary" href="#gallery">
+                Browse Gallery
+                <span aria-hidden="true">↓</span>
+              </a>
+            </div>
+            <div className="hero-stats" aria-label="Gallery stats">
+              <span>
+                <strong>{sites.length}</strong>
+                <small>Sites</small>
+              </span>
+              <span>
+                <strong>{averageScore}</strong>
+                <small>Avg score</small>
+              </span>
+              <span>
+                <strong>{totalReviews}</strong>
+                <small>Reviews</small>
+              </span>
             </div>
           </div>
         </section>
 
-        <section className="section">
-          <FilterBar
-            filters={filters}
-            activeFilter={activeFilter}
-            onChange={setActiveFilter}
-          />
-        </section>
+        <FilterBar
+          categories={CATEGORIES}
+          timeFilters={TIME_FILTERS}
+          sortOptions={SORT_OPTIONS}
+          activeCategory={activeCategory}
+          activeTime={activeTime}
+          sortOption={sortOption}
+          onCategoryChange={setActiveCategory}
+          onTimeChange={setActiveTime}
+          onSortChange={setSortOption}
+        />
 
-        <section className="section">
-          <div className="section-header">
+        <section className="gallery-shell" id="gallery">
+          <div className="gallery-toolbar">
             <div>
-              <h2>Today&apos;s featured site</h2>
-              <p className="muted">Daily winner chosen by community ratings.</p>
+              <p className="section-kicker">* GALLERY FEED</p>
+              <h2>{query ? `Search results for "${query}"` : 'Browse community picks'}</h2>
+              <p className="muted">
+                {visibleSites.length} result{visibleSites.length === 1 ? '' : 's'} by {sortOption.toLowerCase()}.
+              </p>
             </div>
-            <a className="button ghost" href="#explore">
-              View all
-            </a>
+            <TweaksPanel options={displayOptions} onChange={setDisplayOptions} />
           </div>
-          {featuredSite ? (
-            <FeaturedCard
-              site={featuredSite}
-              onView={() => setSelectedSite(featuredSite)}
-              onRate={() => setRatingSite(featuredSite)}
-            />
-          ) : (
-            <div className="card">No featured site yet.</div>
-          )}
-        </section>
 
-        <section className="section" id="explore">
-          <div className="section-header">
-            <div>
-              <h2>Explore the latest uploads</h2>
-              <p className="muted">Sort by category, search, or jump into trending picks.</p>
+          {loadError ? <div className="notice">{loadError}</div> : null}
+
+          {showFeatured && featuredSites.length ? (
+            <div className="featured-block">
+              <p className="section-kicker">* FEATURED PICKS</p>
+              <div className="grid featured-grid">
+                {featuredSites.map((site, index) => (
+                  <SiteCard
+                    key={site.id}
+                    site={site}
+                    index={index}
+                    isUpvoted={upvotedIds.has(site.id)}
+                    showScore={displayOptions.showScores}
+                    onOpen={() => setSelectedSiteId(site.id)}
+                    onToggleUpvote={() => handleToggleUpvote(site.id)}
+                  />
+                ))}
+              </div>
+              <div className="gallery-separator" />
+              <p className="section-kicker">ALL SITES</p>
             </div>
-            <div className="results-actions">
-              <div className="pill muted">{filteredSites.length} results</div>
-              <button className="button ghost" type="button" onClick={() => setIsSearchOpen(true)}>
-                Search
-              </button>
-            </div>
-          </div>
+          ) : null}
+
           {isLoading ? (
-            <div className="card">Loading sites...</div>
-          ) : loadError ? (
-            <div className="card">{loadError}</div>
-          ) : filteredSites.length ? (
             <div className="grid">
-              {filteredSites.map((site) => (
+              {Array.from({ length: 8 }).map((_, index) => (
+                <div className="site-card skeleton-card" key={index} aria-hidden="true" />
+              ))}
+            </div>
+          ) : visibleSites.length ? (
+            <div className="grid">
+              {visibleSites.map((site, index) => (
                 <SiteCard
                   key={site.id}
                   site={site}
-                  onVisit={() => setSelectedSite(site)}
-                  onRate={() => setRatingSite(site)}
+                  index={index}
+                  isUpvoted={upvotedIds.has(site.id)}
+                  showScore={displayOptions.showScores}
+                  onOpen={() => setSelectedSiteId(site.id)}
+                  onToggleUpvote={() => handleToggleUpvote(site.id)}
                 />
               ))}
             </div>
           ) : (
-            <div className="card">No sites match your search yet.</div>
+            <div className="empty-state">
+              <p className="section-kicker">NO MATCHES</p>
+              <h2>No sites match the current view.</h2>
+              <p className="muted">Clear search or choose another category to keep browsing.</p>
+            </div>
           )}
         </section>
-
-        <UploadPanel onCreate={handleCreateSite} />
       </main>
 
       <Footer />
@@ -304,8 +467,76 @@ function App() {
         onClose={() => setIsSearchOpen(false)}
       />
       <AuthModal open={isAuthOpen} onClose={() => setIsAuthOpen(false)} />
-      <SiteDetailModal site={selectedSite} onClose={() => setSelectedSite(null)} />
-      <RateModal site={ratingSite} onClose={() => setRatingSite(null)} />
+      {isSubmitOpen ? (
+        <UploadPanel
+          open
+          categories={CATEGORIES.filter((category) => category !== 'All') as Exclude<Category, 'All'>[]}
+          onCreate={handleCreateSite}
+          onClose={() => setIsSubmitOpen(false)}
+        />
+      ) : null}
+      <SiteDetailModal
+        key={selectedSite?.id ?? 'site-detail-closed'}
+        site={selectedSite}
+        isUpvoted={selectedSite ? upvotedIds.has(selectedSite.id) : false}
+        voteCount={selectedSite ? selectedSite.votes + (upvotedIds.has(selectedSite.id) ? 1 : 0) : 0}
+        onToggleUpvote={() => {
+          if (selectedSite) handleToggleUpvote(selectedSite.id)
+        }}
+        onRatingCreated={handleRatingCreated}
+        onClose={() => setSelectedSiteId(null)}
+      />
+    </div>
+  )
+}
+
+type TweaksPanelProps = {
+  options: DisplayOptions
+  onChange: (options: DisplayOptions) => void
+}
+
+function TweaksPanel({ options, onChange }: TweaksPanelProps) {
+  return (
+    <div className="tweaks-panel" aria-label="Display tweaks">
+      <div className="swatch-row" aria-label="Accent color">
+        {ACCENT_OPTIONS.map((accent) => (
+          <button
+            key={accent}
+            className={`color-swatch color-${accent} ${options.accentColor === accent ? 'active' : ''}`}
+            type="button"
+            aria-label={`Use ${accent} accent`}
+            onClick={() => onChange({ ...options, accentColor: accent })}
+          />
+        ))}
+      </div>
+      <div className="segmented-control" aria-label="Card size">
+        {CARD_SIZE_OPTIONS.map((size) => (
+          <button
+            key={size}
+            type="button"
+            className={options.cardSize === size ? 'active' : ''}
+            onClick={() => onChange({ ...options, cardSize: size })}
+          >
+            {size}
+          </button>
+        ))}
+      </div>
+      <label className="toggle-control">
+        <input
+          type="checkbox"
+          checked={options.showScores}
+          onChange={(event) => onChange({ ...options, showScores: event.target.checked })}
+        />
+        Scores
+      </label>
+      <label className="toggle-control">
+        <input
+          type="checkbox"
+          checked={options.roundedCards}
+          onChange={(event) => onChange({ ...options, roundedCards: event.target.checked })}
+        />
+        Rounded
+      </label>
     </div>
   )
 }

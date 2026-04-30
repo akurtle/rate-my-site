@@ -16,13 +16,6 @@ function RateModal({ site, onClose }: RateModalProps) {
 
   useEffect(() => {
     if (!site) return
-    setRatingValue(5)
-    setCommentText('')
-    setStatus('')
-  }, [site])
-
-  useEffect(() => {
-    if (!site) return
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {

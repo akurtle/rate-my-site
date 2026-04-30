@@ -14,10 +14,15 @@ function AuthModal({ open, onClose }: AuthModalProps) {
     if (!open) return
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
     return () => {
       document.body.style.overflow = previous
+      window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [open])
+  }, [onClose, open])
 
   const handleGoogleSignIn = async () => {
     setStatus('')
@@ -33,13 +38,19 @@ function AuthModal({ open, onClose }: AuthModalProps) {
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
-      <div className="modal-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+      <section
+        className="modal-card auth-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-title"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="modal-header">
           <div>
-            <p className="eyebrow">Account</p>
-            <h3>Sign in to rate and favorite sites</h3>
+            <p className="section-kicker">ACCOUNT</p>
+            <h2 id="auth-title">Sign in to rate and submit</h2>
           </div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
+          <button className="icon-button close-button" type="button" onClick={onClose} aria-label="Close">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
                 d="M6 6l12 12M18 6l-12 12"
@@ -52,30 +63,28 @@ function AuthModal({ open, onClose }: AuthModalProps) {
           </button>
         </div>
 
-        <div className="modal-body">
+        <div className="modal-body auth-stack">
           {!isConfigured ? (
-            <p className="muted">Supabase env not set.</p>
+            <p className="status-text">Supabase env is not configured.</p>
           ) : user ? (
-            <div className="auth-stack">
+            <>
               <p className="muted">Signed in as</p>
-              <p>{user.email}</p>
-              <button className="button ghost" type="button" onClick={handleSignOut}>
+              <p className="account-email">{user.email}</p>
+              <button className="button secondary" type="button" onClick={handleSignOut}>
                 Sign out
               </button>
-            </div>
+            </>
           ) : (
-            <div className="auth-stack">
+            <>
               <button className="button google" type="button" onClick={handleGoogleSignIn}>
                 Continue with Google
               </button>
-              <p className="muted">
-                We&apos;ll only use your account for ratings, comments, and favorites.
-              </p>
-            </div>
+              <p className="muted">Use your account for ratings, comments, and submissions.</p>
+            </>
           )}
-          {status ? <p className="muted">{status}</p> : null}
+          {status ? <p className="status-text">{status}</p> : null}
         </div>
-      </div>
+      </section>
     </div>
   )
 }

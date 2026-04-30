@@ -1,69 +1,60 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import type { Category } from '../App'
 import { ApiError } from '../lib/api'
 
 type UploadPanelProps = {
-  onCreate: (
-    payload: {
-      name: string
-      url: string
-      description: string
-      tags: string[]
-    },
-    screenshots?: File[],
-  ) => Promise<void>
+  open: boolean
+  categories: Exclude<Category, 'All'>[]
+  onCreate: (payload: {
+    url: string
+    category: Exclude<Category, 'All'>
+    description: string
+  }) => Promise<void>
+  onClose: () => void
 }
 
-function UploadPanel({ onCreate }: UploadPanelProps) {
-  const [name, setName] = useState('')
+function UploadPanel({ open, categories, onCreate, onClose }: UploadPanelProps) {
+  const [step, setStep] = useState(1)
   const [url, setUrl] = useState('')
-  const [category, setCategory] = useState('Portfolio')
+  const [category, setCategory] = useState<Exclude<Category, 'All'>>(categories[0] ?? 'Portfolio')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [screenshots, setScreenshots] = useState<File[]>([])
+  const [submittedUrl, setSubmittedUrl] = useState('')
+
+  const canContinue = useMemo(() => url.trim().length > 0 && Boolean(category), [category, url])
+  const canSubmit = description.trim().length >= 10 && !isSubmitting
+
+  useEffect(() => {
+    if (!open) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = previous
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose, open])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
+    if (!canSubmit) return
     setStatus('')
-    setErrors({})
-    if (!name.trim() || !url.trim() || !description.trim()) {
-      const nextErrors: Record<string, string> = {}
-      if (!name.trim()) nextErrors.name = 'Name is required.'
-      if (!url.trim()) nextErrors.url = 'URL is required.'
-      if (!description.trim()) nextErrors.description = 'Description is required.'
-      setErrors(nextErrors)
-      setStatus('Please fix the highlighted fields.')
-      return
-    }
     setIsSubmitting(true)
     try {
-      await onCreate(
-        {
-          name: name.trim(),
-          url: url.trim(),
-          description: description.trim(),
-          tags: [category],
-        },
-        screenshots,
-      )
-      setStatus('Site submitted successfully.')
-      setName('')
-      setUrl('')
-      setDescription('')
-      setScreenshots([])
+      await onCreate({
+        url: url.trim(),
+        category,
+        description: description.trim(),
+      })
+      setSubmittedUrl(url.trim())
+      setStep(3)
     } catch (error) {
       if (error instanceof ApiError && error.fields?.length) {
-        const nextErrors: Record<string, string> = {}
-        error.fields.forEach((field) => {
-          if (field === 'tags') {
-            nextErrors.category = 'Choose a category.'
-          } else {
-            nextErrors[field] = 'Invalid value.'
-          }
-        })
-        setErrors(nextErrors)
-        setStatus('Please fix the highlighted fields.')
+        setStatus(`Invalid fields: ${error.fields.join(', ')}`)
       } else {
         setStatus(error instanceof Error ? error.message : 'Unable to submit site.')
       }
@@ -72,112 +63,124 @@ function UploadPanel({ onCreate }: UploadPanelProps) {
     }
   }
 
+  if (!open) return null
+
   return (
-    <section className="section" id="upload">
-      <div className="section-header">
-        <div>
-          <h2>Upload your site</h2>
-          <p className="muted">Share the link, pick a category, and start collecting feedback.</p>
-        </div>
-        <span className="pill muted">Takes under 2 minutes</span>
-      </div>
-      <form className="card upload-card" onSubmit={handleSubmit}>
-        <label>
-          Site name
-          <input
-            placeholder="Atlas Analytics"
-            type="text"
-            value={name}
-            onChange={(event) => {
-              setName(event.target.value)
-              if (errors.name) setErrors((prev) => ({ ...prev, name: '' }))
-            }}
-            className={errors.name ? 'input-error' : ''}
-          />
-          {errors.name ? <span className="error-text">{errors.name}</span> : null}
-        </label>
-        <label>
-          Site URL
-          <input
-            placeholder="https://atlasapp.io"
-            type="url"
-            value={url}
-            onChange={(event) => {
-              setUrl(event.target.value)
-              if (errors.url) setErrors((prev) => ({ ...prev, url: '' }))
-            }}
-            className={errors.url ? 'input-error' : ''}
-          />
-          {errors.url ? <span className="error-text">{errors.url}</span> : null}
-        </label>
-        <label>
-          Category
-          <select
-            value={category}
-            onChange={(event) => {
-              setCategory(event.target.value)
-              if (errors.category) setErrors((prev) => ({ ...prev, category: '' }))
-            }}
-            className={errors.category ? 'input-error' : ''}
-          >
-            <option>Portfolio</option>
-            <option>SaaS</option>
-            <option>Agency</option>
-            <option>Ecommerce</option>
-            <option>Blog</option>
-            <option>Tools</option>
-          </select>
-          {errors.category ? <span className="error-text">{errors.category}</span> : null}
-        </label>
-        <label className="full">
-          Quick summary
-          <textarea
-            placeholder="Tell people what makes your site special and what feedback you want."
-            value={description}
-            onChange={(event) => {
-              setDescription(event.target.value)
-              if (errors.description) setErrors((prev) => ({ ...prev, description: '' }))
-            }}
-            className={errors.description ? 'input-error' : ''}
-          />
-          {errors.description ? <span className="error-text">{errors.description}</span> : null}
-        </label>
-        <label className="full">
-          Screenshots (optional)
-          <div className="file-row">
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(event) => {
-                const files = Array.from(event.target.files ?? [])
-                setScreenshots(files)
-              }}
-            />
-            {screenshots.length ? (
-              <button
-                className="button ghost"
-                type="button"
-                onClick={() => setScreenshots([])}
-              >
-                Clear
-              </button>
-            ) : null}
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <section
+        className="modal-card submit-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="submit-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-header">
+          <div>
+            <p className="section-kicker">SUBMIT</p>
+            <h2 id="submit-title">Add a site</h2>
           </div>
-          {screenshots.length ? (
-            <span className="muted">{screenshots.length} image(s) selected</span>
-          ) : null}
-        </label>
-        <div className="upload-actions">
-          <button className="button primary" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Submitting...' : 'Submit for review'}
+          <button className="icon-button close-button" type="button" onClick={onClose} aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M6 6l12 12M18 6l-12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
           </button>
-          <span className="muted">
-            {status || 'Ratings open to signed-in members only.'}
-          </span>
         </div>
-      </form>
-    </section>
+
+        <div className="progress-bar" aria-label={`Step ${Math.min(step, 2)} of 2`}>
+          <span className={step >= 1 ? 'active' : ''} />
+          <span className={step >= 2 ? 'active' : ''} />
+        </div>
+
+        {step === 1 ? (
+          <form
+            className="submit-step"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (canContinue) setStep(2)
+            }}
+          >
+            <label>
+              Site URL
+              <input
+                type="url"
+                value={url}
+                placeholder="https://example.com"
+                onChange={(event) => {
+                  setUrl(event.target.value)
+                  setStatus('')
+                }}
+              />
+            </label>
+
+            <div className="submit-field">
+              <span>Category</span>
+              <div className="category-picker">
+                {categories.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    className={category === item ? 'active' : ''}
+                    onClick={() => setCategory(item)}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button className="button primary full-button" type="submit" disabled={!canContinue}>
+              Continue
+            </button>
+          </form>
+        ) : null}
+
+        {step === 2 ? (
+          <form className="submit-step" onSubmit={handleSubmit}>
+            <label>
+              Description
+              <textarea
+                value={description}
+                placeholder="What should reviewers notice about the design?"
+                onChange={(event) => {
+                  setDescription(event.target.value)
+                  setStatus('')
+                }}
+              />
+            </label>
+            <div className="submit-actions">
+              <button className="button secondary" type="button" onClick={() => setStep(1)}>
+                Back
+              </button>
+              <button className="button primary" type="submit" disabled={!canSubmit}>
+                {isSubmitting ? 'Submitting...' : 'Submit'}
+              </button>
+            </div>
+            {status ? <p className="status-text">{status}</p> : null}
+          </form>
+        ) : null}
+
+        {step === 3 ? (
+          <div className="confirmation-step">
+            <div className="confirmation-mark" aria-hidden="true">
+              ✓
+            </div>
+            <h3>Submitted</h3>
+            <p>
+              <strong>{submittedUrl}</strong> has been added to the gallery.
+            </p>
+            <button className="button primary full-button" type="button" onClick={onClose}>
+              Done
+            </button>
+          </div>
+        ) : null}
+      </section>
+    </div>
   )
 }
 

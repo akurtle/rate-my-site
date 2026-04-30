@@ -53,7 +53,7 @@ const siteSchema = z.object({
 })
 
 const ratingSchema = z.object({
-  score: z.number().int().min(1).max(5),
+  score: z.number().int().min(1).max(10),
   comment: z.string().max(500).optional(),
 })
 

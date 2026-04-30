@@ -1,56 +1,83 @@
+import type { KeyboardEvent } from 'react'
 import type { Site } from '../App'
+import SiteThumbnail from './SiteThumbnail'
 
 type SiteCardProps = {
   site: Site
-  onVisit: () => void
-  onRate: () => void
+  index: number
+  isUpvoted: boolean
+  showScore: boolean
+  onOpen: () => void
+  onToggleUpvote: () => void
 }
 
-function SiteCard({ site, onVisit, onRate }: SiteCardProps) {
-  const previewImage = site.screenshotUrl || site.screenshots?.[0]
+function SiteCard({
+  site,
+  index,
+  isUpvoted,
+  showScore,
+  onOpen,
+  onToggleUpvote,
+}: SiteCardProps) {
+  const voteCount = site.votes + (isUpvoted ? 1 : 0)
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onOpen()
+    }
+  }
+
   return (
-    <article className="card site-card">
-      <div className="site-preview">
-        {previewImage ? (
-          <img src={previewImage} alt={`${site.name} preview`} />
-        ) : (
-          <div className="site-preview-placeholder">
-            <span className="muted">No preview yet</span>
+    <article
+      className="site-card"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={handleKeyDown}
+      style={{ animationDelay: `${index * 0.05}s` }}
+    >
+      <SiteThumbnail site={site} />
+
+      <div className="site-card-body">
+        <div className="site-title-row">
+          <div className="site-title-copy">
+            <h3>{site.name}</h3>
+            <p>{site.url}</p>
           </div>
-        )}
-      </div>
-      <div className="site-card-top">
-        <div>
-          <h3>{site.name}</h3>
-          <span className="muted">{site.url}</span>
+          {showScore ? (
+            <span className={`score-badge ${getScoreClass(site.rating)}`}>{site.rating.toFixed(1)}</span>
+          ) : null}
         </div>
-        <span className="pill">{site.rating.toFixed(1)} rating</span>
-      </div>
-      <p className="muted">{site.description}</p>
-      <div className="tag-row">
-        {site.tags.map((tag) => (
-          <span key={tag} className="tag">
-            {tag}
-          </span>
-        ))}
-      </div>
-      <div className="site-card-footer">
-        <div className="site-meta">
-          <span>{site.reviews} reviews</span>
-          <span className="divider" aria-hidden="true" />
-          <span>{site.trend}</span>
-        </div>
-        <div className="button-row">
-          <button className="button ghost" type="button" onClick={onRate}>
-            Rate
-          </button>
-          <button className="button primary" type="button" onClick={onVisit}>
-            Visit
+
+        <p className="site-card-description">{site.description}</p>
+
+        <div className="site-card-footer">
+          <span className="category-chip">{site.category}</span>
+          <button
+            className={`upvote-button ${isUpvoted ? 'active' : ''}`}
+            type="button"
+            aria-pressed={isUpvoted}
+            onClick={(event) => {
+              event.stopPropagation()
+              onToggleUpvote()
+            }}
+          >
+            <svg viewBox="0 0 14 14" aria-hidden="true">
+              <path d="M7 2 12 8H9v4H5V8H2l5-6Z" fill="currentColor" />
+            </svg>
+            {voteCount}
           </button>
         </div>
       </div>
     </article>
   )
+}
+
+function getScoreClass(score: number) {
+  if (score >= 9) return 'score-high'
+  if (score >= 8) return 'score-mid'
+  return 'score-low'
 }
 
 export default SiteCard

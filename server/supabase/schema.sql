@@ -23,10 +23,13 @@ create table if not exists public.ratings (
   id uuid primary key default gen_random_uuid(),
   site_id uuid references public.sites on delete cascade,
   user_id uuid references auth.users on delete set null,
-  score integer not null check (score >= 1 and score <= 5),
+  score integer not null check (score >= 1 and score <= 10),
   comment text,
   created_at timestamptz default now()
 );
+
+alter table public.ratings drop constraint if exists ratings_score_check;
+alter table public.ratings add constraint ratings_score_check check (score >= 1 and score <= 10);
 
 create table if not exists public.comment_replies (
   id uuid primary key default gen_random_uuid(),
