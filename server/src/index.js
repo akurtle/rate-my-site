@@ -251,6 +251,20 @@ app.post('/sites/:id/ratings', requireAuth, async (req, res) => {
   }
 
   const { id } = req.params
+  const { data: existingRatings, error: existingError } = await supabase
+    .from('ratings')
+    .select('id')
+    .eq('site_id', id)
+    .eq('user_id', req.user.id)
+    .limit(1)
+
+  if (existingError) {
+    return res.status(500).json({ error: existingError.message })
+  }
+  if (existingRatings?.length) {
+    return res.status(409).json({ error: 'You have already reviewed this site.' })
+  }
+
   const { data, error } = await supabase
     .from('ratings')
     .insert({
@@ -263,6 +277,9 @@ app.post('/sites/:id/ratings', requireAuth, async (req, res) => {
     .single()
 
   if (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'You have already reviewed this site.' })
+    }
     return res.status(500).json({ error: error.message })
   }
   if (cacheEnabled) {

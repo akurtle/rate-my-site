@@ -78,7 +78,8 @@ export async function createRating(siteId: string, payload: CreateRatingPayload,
     body: JSON.stringify(payload),
   })
   if (!response.ok) {
-    throw new Error('Failed to submit rating')
+    const errorBody = await safeParseError(response)
+    throw new ApiError(errorBody.message, errorBody.fields)
   }
   return response.json()
 }

@@ -348,7 +348,7 @@ function App() {
       <main>
         <section className="hero" aria-labelledby="hero-title">
           <div className="hero-inner">
-            <p className="hero-badge">* {Math.max(totalVotes, 4200).toLocaleString()}+ SITES RATED THIS MONTH</p>
+            <p className="hero-badge">* {totalVotes.toLocaleString()} LIVE RATINGS TRACKED</p>
             <h1 id="hero-title">
               Design inspiration, <em>rated by the community.</em>
             </h1>

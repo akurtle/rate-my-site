@@ -31,6 +31,10 @@ create table if not exists public.ratings (
 alter table public.ratings drop constraint if exists ratings_score_check;
 alter table public.ratings add constraint ratings_score_check check (score >= 1 and score <= 5);
 
+create unique index if not exists ratings_one_per_user_site_idx
+  on public.ratings (site_id, user_id)
+  where user_id is not null;
+
 create table if not exists public.comment_replies (
   id uuid primary key default gen_random_uuid(),
   rating_id uuid references public.ratings on delete cascade,

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { Site } from '../App'
 import { createRating, fetchRatings } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabaseClient'
 import SiteThumbnail from './SiteThumbnail'
 
@@ -19,6 +20,7 @@ type Review = {
   text: string
   time: string
   score: number
+  userId?: string | null
 }
 
 type RatingRow = {
@@ -44,6 +46,7 @@ function SiteDetailModal({
   onRatingCreated,
   onClose,
 }: SiteDetailModalProps) {
+  const { user } = useAuth()
   const [reviewText, setReviewText] = useState('')
   const [reviews, setReviews] = useState<Review[]>([])
   const [ratingValue, setRatingValue] = useState(4)
@@ -51,6 +54,7 @@ function SiteDetailModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [hasUserReviewed, setHasUserReviewed] = useState(false)
 
   useEffect(() => {
     if (!site) return
@@ -76,7 +80,9 @@ function SiteDetailModal({
       try {
         const response = await fetchRatings(site.id)
         if (!active) return
-        const mapped = ((response.data ?? []) as RatingRow[])
+        const rows = (response.data ?? []) as RatingRow[]
+        setHasUserReviewed(Boolean(user && rows.some((item) => item.user_id === user.id)))
+        const mapped = rows
           .filter((item) => item.comment && item.comment.trim().length > 0)
           .map((item) => ({
             id: item.id,
@@ -84,12 +90,14 @@ function SiteDetailModal({
             text: item.comment ?? '',
             time: formatRelative(item.created_at),
             score: item.score ?? 0,
+            userId: item.user_id ?? null,
           }))
         setReviews(mapped)
       } catch (error) {
         if (!active) return
         setStatus(error instanceof Error ? error.message : 'Failed to load reviews.')
         setReviews([])
+        setHasUserReviewed(false)
       } finally {
         if (active) setIsLoading(false)
       }
@@ -99,7 +107,7 @@ function SiteDetailModal({
     return () => {
       active = false
     }
-  }, [site])
+  }, [site, user])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -112,6 +120,10 @@ function SiteDetailModal({
     const session = sessionData.session
     if (!session) {
       setStatus('Sign in to rate a site.')
+      return
+    }
+    if (hasUserReviewed) {
+      setStatus('You have already reviewed this site.')
       return
     }
 
@@ -135,10 +147,12 @@ function SiteDetailModal({
           text: reviewText.trim(),
           time: formatRelative(data.created_at),
           score: data.score ?? ratingValue,
+          userId: session.user.id,
         }
         setReviews((prev) => [newReview, ...prev])
       }
       onRatingCreated(site.id, ratingValue)
+      setHasUserReviewed(true)
       setReviewText('')
       setSubmitted(true)
     } catch (error) {
@@ -229,6 +243,7 @@ function SiteDetailModal({
                     type="button"
                     className={ratingValue === value ? 'active' : ''}
                     aria-pressed={ratingValue === value}
+                    disabled={hasUserReviewed}
                     onClick={() => {
                       setRatingValue(value)
                       setSubmitted(false)
@@ -240,15 +255,19 @@ function SiteDetailModal({
               </div>
               <textarea
                 value={reviewText}
+                disabled={hasUserReviewed}
                 onChange={(event) => {
                   setReviewText(event.target.value)
                   setSubmitted(false)
                 }}
                 placeholder="What stands out? Share notes on layout, hierarchy, motion, or polish."
               />
-              <button className="button primary" type="submit" disabled={isSubmitting}>
+              <button className="button primary" type="submit" disabled={isSubmitting || hasUserReviewed}>
                 {isSubmitting ? 'Submitting...' : 'Submit Rating'}
               </button>
+              {hasUserReviewed ? (
+                <p className="status-text">You have already reviewed this site.</p>
+              ) : null}
               {submitted ? <p className="success-box">Thanks! Your rating has been added.</p> : null}
               {status ? <p className="status-text">{status}</p> : null}
             </form>
