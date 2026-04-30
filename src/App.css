@@ -1152,6 +1152,81 @@ a:focus-visible {
   line-height: 1.6;
 }
 
+.reply-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.reply-button {
+  width: fit-content;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 10px;
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.reply-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.reply-form {
+  display: grid;
+  gap: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: oklch(0.16 0.012 265);
+  padding: 10px;
+}
+
+.reply-form textarea {
+  min-height: 78px;
+}
+
+.reply-form .button {
+  width: fit-content;
+}
+
+.reply-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  margin-left: 14px;
+  border-left: 1px solid var(--border);
+  padding-left: 12px;
+}
+
+.reply-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid color-mix(in oklch, var(--border), transparent 20%);
+  border-radius: 8px;
+  background: oklch(0.17 0.012 265);
+  padding: 10px 12px;
+}
+
+.reply-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.reply-header strong {
+  color: var(--accent);
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.reply-header span {
+  color: var(--muted);
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 10px;
+}
+
 .progress-bar {
   display: flex;
   gap: 6px;

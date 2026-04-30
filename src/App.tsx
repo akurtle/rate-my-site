@@ -330,6 +330,25 @@ function App() {
     setSortOption('Newest')
   }
 
+  const scrollToGallery = () => {
+    document.getElementById('gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const handleTopRatedSelect = () => {
+    setQuery('')
+    setActiveCategory('All')
+    setSortOption('Top Rated')
+    scrollToGallery()
+  }
+
+  const handleCollectionsSelect = () => {
+    setQuery('')
+    setActiveCategory('All')
+    setActiveTime('This Week')
+    setSortOption('Most Voted')
+    scrollToGallery()
+  }
+
   return (
     <div
       className="app"
@@ -343,6 +362,8 @@ function App() {
         onSearchOpen={() => setIsSearchOpen(true)}
         onAuthOpen={() => setIsAuthOpen(true)}
         onSubmitOpen={() => setIsSubmitOpen(true)}
+        onTopRatedSelect={handleTopRatedSelect}
+        onCollectionsSelect={handleCollectionsSelect}
       />
 
       <main>
@@ -353,8 +374,8 @@ function App() {
               Design inspiration, <em>rated by the community.</em>
             </h1>
             <p className="hero-subtitle">
-              Discover polished websites, compare craft decisions, and leave concise ratings that
-              help designers sharpen their next launch.
+              Rate website design, get site feedback, browse web design inspiration, and compare
+              landing pages, portfolios, SaaS sites, dashboards, blogs, and ecommerce experiences.
             </p>
             <div className="hero-actions">
               <button className="button primary" type="button" onClick={() => setIsSubmitOpen(true)}>

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { Site } from '../App'
-import { createRating, fetchRatings } from '../lib/api'
+import { createRating, createReply, fetchRatings } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabaseClient'
 import SiteThumbnail from './SiteThumbnail'
@@ -21,6 +21,18 @@ type Review = {
   time: string
   score: number
   userId?: string | null
+  replies: ReplyNode[]
+}
+
+type ReplyNode = {
+  id: string
+  ratingId: string
+  parentReplyId?: string | null
+  author: string
+  text: string
+  time: string
+  userId?: string | null
+  replies: ReplyNode[]
 }
 
 type RatingRow = {
@@ -28,6 +40,16 @@ type RatingRow = {
   user_id?: string | null
   comment?: string | null
   score?: number | null
+  created_at?: string | null
+  comment_replies?: ReplyRow[] | null
+}
+
+type ReplyRow = {
+  id: string
+  rating_id?: string | null
+  parent_reply_id?: string | null
+  user_id?: string | null
+  comment?: string | null
   created_at?: string | null
 }
 
@@ -55,6 +77,8 @@ function SiteDetailModal({
   const [isLoading, setIsLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [hasUserReviewed, setHasUserReviewed] = useState(false)
+  const [replyTargetId, setReplyTargetId] = useState<string | null>(null)
+  const [replyText, setReplyText] = useState('')
 
   useEffect(() => {
     if (!site) return
@@ -91,6 +115,7 @@ function SiteDetailModal({
             time: formatRelative(item.created_at),
             score: item.score ?? 0,
             userId: item.user_id ?? null,
+            replies: buildReplyTree(item.comment_replies ?? []),
           }))
         setReviews(mapped)
       } catch (error) {
@@ -148,6 +173,7 @@ function SiteDetailModal({
           time: formatRelative(data.created_at),
           score: data.score ?? ratingValue,
           userId: session.user.id,
+          replies: [],
         }
         setReviews((prev) => [newReview, ...prev])
       }
@@ -157,6 +183,67 @@ function SiteDetailModal({
       setSubmitted(true)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Failed to submit rating.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleReplySubmit = async (event: FormEvent, reviewId: string, parentReplyId?: string | null) => {
+    event.preventDefault()
+    if (!site) return
+    if (!replyText.trim()) return
+    if (!supabase) {
+      setStatus('Supabase is not configured.')
+      return
+    }
+    const { data: sessionData } = await supabase.auth.getSession()
+    const session = sessionData.session
+    if (!session) {
+      setStatus('Sign in to reply.')
+      return
+    }
+    if (hasUserReplied(reviewId, parentReplyId ?? null, session.user.id, reviews)) {
+      setStatus('You have already replied to this message.')
+      return
+    }
+
+    setIsSubmitting(true)
+    setStatus('')
+    try {
+      const response = await createReply(
+        reviewId,
+        {
+          comment: replyText.trim(),
+          parentReplyId: parentReplyId ?? null,
+        },
+        session.access_token,
+      )
+      const data = response.data as ReplyRow
+      const newReply: ReplyNode = {
+        id: data.id,
+        ratingId: data.rating_id ?? reviewId,
+        parentReplyId: data.parent_reply_id ?? null,
+        author: session.user.email ?? 'You',
+        text: data.comment ?? replyText.trim(),
+        time: formatRelative(data.created_at),
+        userId: session.user.id,
+        replies: [],
+      }
+      setReviews((prev) =>
+        prev.map((review) => {
+          if (review.id !== reviewId) return review
+          return {
+            ...review,
+            replies: parentReplyId
+              ? addReplyToTree(review.replies, parentReplyId, newReply)
+              : [newReply, ...review.replies],
+          }
+        }),
+      )
+      setReplyText('')
+      setReplyTargetId(null)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Failed to submit reply.')
     } finally {
       setIsSubmitting(false)
     }
@@ -290,6 +377,38 @@ function SiteDetailModal({
                       </span>
                     </div>
                     <p>{review.text}</p>
+                    <ReplyControls
+                      reviewId={review.id}
+                      targetId={review.id}
+                      parentReplyId={null}
+                      isOpen={replyTargetId === review.id}
+                      isSubmitting={isSubmitting}
+                      replyText={replyText}
+                      canReply={!user || !hasUserReplied(review.id, null, user.id, reviews)}
+                      onOpen={() => {
+                        setReplyTargetId((current) => (current === review.id ? null : review.id))
+                        setReplyText('')
+                      }}
+                      onTextChange={setReplyText}
+                      onSubmit={(event) => handleReplySubmit(event, review.id, null)}
+                    />
+                    {review.replies.length ? (
+                      <ReplyList
+                        replies={review.replies}
+                        reviewId={review.id}
+                        currentUserId={user?.id ?? null}
+                        replyTargetId={replyTargetId}
+                        replyText={replyText}
+                        isSubmitting={isSubmitting}
+                        allReviews={reviews}
+                        onOpenReply={(targetId) => {
+                          setReplyTargetId((current) => (current === targetId ? null : targetId))
+                          setReplyText('')
+                        }}
+                        onTextChange={setReplyText}
+                        onSubmit={handleReplySubmit}
+                      />
+                    ) : null}
                   </article>
                 ))
               ) : (
@@ -319,6 +438,172 @@ function StarMeter({ score }: { score: number }) {
       ))}
     </span>
   )
+}
+
+type ReplyControlsProps = {
+  reviewId: string
+  targetId: string
+  parentReplyId?: string | null
+  isOpen: boolean
+  isSubmitting: boolean
+  replyText: string
+  canReply: boolean
+  onOpen: () => void
+  onTextChange: (value: string) => void
+  onSubmit: (event: FormEvent, reviewId: string, parentReplyId?: string | null) => void
+}
+
+function ReplyControls({
+  reviewId,
+  targetId,
+  parentReplyId,
+  isOpen,
+  isSubmitting,
+  replyText,
+  canReply,
+  onOpen,
+  onTextChange,
+  onSubmit,
+}: ReplyControlsProps) {
+  return (
+    <div className="reply-controls">
+      <button className="reply-button" type="button" onClick={onOpen} disabled={!canReply}>
+        {canReply ? 'Reply' : 'Already replied'}
+      </button>
+      {isOpen ? (
+        <form className="reply-form" onSubmit={(event) => onSubmit(event, reviewId, parentReplyId)}>
+          <textarea
+            value={replyText}
+            onChange={(event) => onTextChange(event.target.value)}
+            placeholder={`Reply to this ${targetId === reviewId ? 'review' : 'message'}...`}
+          />
+          <button className="button primary" type="submit" disabled={isSubmitting || !replyText.trim()}>
+            {isSubmitting ? 'Replying...' : 'Post Reply'}
+          </button>
+        </form>
+      ) : null}
+    </div>
+  )
+}
+
+type ReplyListProps = {
+  replies: ReplyNode[]
+  reviewId: string
+  currentUserId: string | null
+  replyTargetId: string | null
+  replyText: string
+  isSubmitting: boolean
+  allReviews: Review[]
+  onOpenReply: (targetId: string) => void
+  onTextChange: (value: string) => void
+  onSubmit: (event: FormEvent, reviewId: string, parentReplyId?: string | null) => void
+}
+
+function ReplyList({
+  replies,
+  reviewId,
+  currentUserId,
+  replyTargetId,
+  replyText,
+  isSubmitting,
+  allReviews,
+  onOpenReply,
+  onTextChange,
+  onSubmit,
+}: ReplyListProps) {
+  return (
+    <div className="reply-list">
+      {replies.map((reply) => (
+        <article className="reply-card" key={reply.id}>
+          <div className="reply-header">
+            <strong>{reply.author}</strong>
+            <span>{reply.time}</span>
+          </div>
+          <p>{reply.text}</p>
+          <ReplyControls
+            reviewId={reviewId}
+            targetId={reply.id}
+            parentReplyId={reply.id}
+            isOpen={replyTargetId === reply.id}
+            isSubmitting={isSubmitting}
+            replyText={replyText}
+            canReply={!currentUserId || !hasUserReplied(reviewId, reply.id, currentUserId, allReviews)}
+            onOpen={() => onOpenReply(reply.id)}
+            onTextChange={onTextChange}
+            onSubmit={onSubmit}
+          />
+          {reply.replies.length ? (
+            <ReplyList
+              replies={reply.replies}
+              reviewId={reviewId}
+              currentUserId={currentUserId}
+              replyTargetId={replyTargetId}
+              replyText={replyText}
+              isSubmitting={isSubmitting}
+              allReviews={allReviews}
+              onOpenReply={onOpenReply}
+              onTextChange={onTextChange}
+              onSubmit={onSubmit}
+            />
+          ) : null}
+        </article>
+      ))}
+    </div>
+  )
+}
+
+function buildReplyTree(rows: ReplyRow[]) {
+  const nodes = new Map<string, ReplyNode>()
+  const roots: ReplyNode[] = []
+
+  rows.forEach((row) => {
+    nodes.set(row.id, {
+      id: row.id,
+      ratingId: row.rating_id ?? '',
+      parentReplyId: row.parent_reply_id ?? null,
+      author: row.user_id ? `@${row.user_id.slice(0, 6)}` : 'Member',
+      text: row.comment ?? '',
+      time: formatRelative(row.created_at),
+      userId: row.user_id ?? null,
+      replies: [],
+    })
+  })
+
+  nodes.forEach((node) => {
+    if (node.parentReplyId && nodes.has(node.parentReplyId)) {
+      nodes.get(node.parentReplyId)?.replies.push(node)
+    } else {
+      roots.push(node)
+    }
+  })
+
+  return roots
+}
+
+function addReplyToTree(replies: ReplyNode[], parentReplyId: string, newReply: ReplyNode): ReplyNode[] {
+  return replies.map((reply) => {
+    if (reply.id === parentReplyId) {
+      return { ...reply, replies: [newReply, ...reply.replies] }
+    }
+    return { ...reply, replies: addReplyToTree(reply.replies, parentReplyId, newReply) }
+  })
+}
+
+function hasUserReplied(
+  reviewId: string,
+  parentReplyId: string | null,
+  userId: string,
+  reviews: Review[],
+) {
+  const review = reviews.find((item) => item.id === reviewId)
+  if (!review) return false
+  return flattenReplies(review.replies).some(
+    (reply) => reply.userId === userId && (reply.parentReplyId ?? null) === parentReplyId,
+  )
+}
+
+function flattenReplies(replies: ReplyNode[]): ReplyNode[] {
+  return replies.flatMap((reply) => [reply, ...flattenReplies(reply.replies)])
 }
 
 function formatRelative(dateValue?: string | null) {

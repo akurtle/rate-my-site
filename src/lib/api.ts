@@ -14,6 +14,7 @@ export type CreateRatingPayload = {
 
 export type CreateReplyPayload = {
   comment: string
+  parentReplyId?: string | null
 }
 
 export class ApiError extends Error {
@@ -115,7 +116,8 @@ export async function createReply(ratingId: string, payload: CreateReplyPayload,
     body: JSON.stringify(payload),
   })
   if (!response.ok) {
-    throw new Error('Failed to submit reply')
+    const errorBody = await safeParseError(response)
+    throw new ApiError(errorBody.message, errorBody.fields)
   }
   return response.json()
 }

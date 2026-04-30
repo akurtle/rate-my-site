@@ -38,10 +38,21 @@ create unique index if not exists ratings_one_per_user_site_idx
 create table if not exists public.comment_replies (
   id uuid primary key default gen_random_uuid(),
   rating_id uuid references public.ratings on delete cascade,
+  parent_reply_id uuid references public.comment_replies on delete cascade,
   user_id uuid references auth.users on delete set null,
   comment text not null,
   created_at timestamptz default now()
 );
+
+alter table public.comment_replies add column if not exists parent_reply_id uuid references public.comment_replies on delete cascade;
+
+create unique index if not exists comment_replies_one_per_user_review_idx
+  on public.comment_replies (rating_id, user_id)
+  where parent_reply_id is null and user_id is not null;
+
+create unique index if not exists comment_replies_one_per_user_reply_idx
+  on public.comment_replies (parent_reply_id, user_id)
+  where parent_reply_id is not null and user_id is not null;
 
 create table if not exists public.site_screenshots (
   id uuid primary key default gen_random_uuid(),

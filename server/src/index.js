@@ -70,6 +70,7 @@ const ratingSchema = z.object({
 
 const replySchema = z.object({
   comment: z.string().min(1).max(500),
+  parentReplyId: z.string().uuid().nullable().optional(),
 })
 
 const listVersionKey = 'cache:sites:list:version'
@@ -229,7 +230,7 @@ app.get('/sites/:id/ratings', async (req, res) => {
 
   const { data, error } = await supabase
     .from('ratings')
-    .select('id,score,comment,created_at,user_id,comment_replies(id,comment,created_at,user_id)')
+    .select('id,score,comment,created_at,user_id,comment_replies(id,rating_id,parent_reply_id,comment,created_at,user_id)')
     .eq('site_id', id)
     .order('created_at', { ascending: false })
 
@@ -392,6 +393,7 @@ app.post('/ratings/:id/replies', requireAuth, async (req, res) => {
   }
 
   const { id } = req.params
+  const parentReplyId = parseResult.data.parentReplyId ?? null
   const { data: ratingRow, error: ratingError } = await supabase
     .from('ratings')
     .select('id,site_id')
@@ -402,17 +404,52 @@ app.post('/ratings/:id/replies', requireAuth, async (req, res) => {
     return res.status(404).json({ error: 'Rating not found.' })
   }
 
+  if (parentReplyId) {
+    const { data: parentReply, error: parentReplyError } = await supabase
+      .from('comment_replies')
+      .select('id,rating_id')
+      .eq('id', parentReplyId)
+      .single()
+
+    if (parentReplyError || !parentReply || parentReply.rating_id !== id) {
+      return res.status(400).json({ error: 'Parent reply does not belong to this review.' })
+    }
+  }
+
+  let existingReplyQuery = supabase
+    .from('comment_replies')
+    .select('id')
+    .eq('rating_id', id)
+    .eq('user_id', req.user.id)
+    .limit(1)
+
+  existingReplyQuery = parentReplyId
+    ? existingReplyQuery.eq('parent_reply_id', parentReplyId)
+    : existingReplyQuery.is('parent_reply_id', null)
+
+  const { data: existingReplies, error: existingReplyError } = await existingReplyQuery
+  if (existingReplyError) {
+    return res.status(500).json({ error: existingReplyError.message })
+  }
+  if (existingReplies?.length) {
+    return res.status(409).json({ error: 'You have already replied to this message.' })
+  }
+
   const { data, error } = await supabase
     .from('comment_replies')
     .insert({
       rating_id: id,
+      parent_reply_id: parentReplyId,
       user_id: req.user.id,
       comment: parseResult.data.comment,
     })
-    .select('id,comment,created_at,user_id')
+    .select('id,rating_id,parent_reply_id,comment,created_at,user_id')
     .single()
 
   if (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'You have already replied to this message.' })
+    }
     return res.status(500).json({ error: error.message })
   }
   if (cacheEnabled) {

@@ -6,6 +6,8 @@ type HeaderProps = {
   onSearchOpen: () => void
   onAuthOpen: () => void
   onSubmitOpen: () => void
+  onTopRatedSelect: () => void
+  onCollectionsSelect: () => void
 }
 
 function Header({
@@ -14,6 +16,8 @@ function Header({
   onSearchOpen,
   onAuthOpen,
   onSubmitOpen,
+  onTopRatedSelect,
+  onCollectionsSelect,
 }: HeaderProps) {
   const { user, isConfigured, isLoading } = useAuth()
   const displayName =
@@ -32,10 +36,10 @@ function Header({
 
           <nav className="header-nav" aria-label="Main navigation">
             <a href="#gallery">Discover</a>
-            <button type="button" onClick={() => onQueryChange('')}>
+            <button type="button" onClick={onTopRatedSelect}>
               Top Rated
             </button>
-            <button type="button">Collections</button>
+            <button type="button" onClick={onCollectionsSelect}>Collections</button>
           </nav>
         </div>
 

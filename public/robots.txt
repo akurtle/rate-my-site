@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://rate-my-site.netlify.app/sitemap.xml
