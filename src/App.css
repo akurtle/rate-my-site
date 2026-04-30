@@ -191,7 +191,7 @@ a:focus-visible {
   position: sticky;
   top: 0;
   z-index: 100;
-  height: 56px;
+  height: 78px;
   border-bottom: 1px solid var(--border);
   background: oklch(0.11 0.012 265 / 0.92);
   backdrop-filter: blur(12px);
@@ -237,8 +237,8 @@ a:focus-visible {
 }
 
 .brand-logo {
-  width: 172px;
-  height: 36px;
+  width: 280px;
+  height: 58px;
   border-radius: 0;
 }
 
@@ -427,7 +427,7 @@ a:focus-visible {
 
 .filter-bar {
   position: sticky;
-  top: 56px;
+  top: 78px;
   z-index: 90;
   display: flex;
   align-items: center;
