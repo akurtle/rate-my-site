@@ -74,14 +74,14 @@ function SiteDetailModal({ site, onClose }: SiteDetailModalProps) {
         const response = await fetchRatings(site.id)
         if (!active) return
         const mapped = (response.data ?? [])
-          .filter((item) => item.comment && item.comment.trim().length > 0)
-          .map((item) => ({
+          .filter((item:any) => item.comment && item.comment.trim().length > 0)
+          .map((item:any) => ({
             id: item.id,
             author: item.user_id ? `@${item.user_id.slice(0, 6)}` : 'Member',
             text: item.comment ?? '',
             time: formatRelative(item.created_at),
             score: item.score ?? 0,
-            replies: (item.comment_replies ?? []).map((reply) => ({
+            replies: (item.comment_replies ?? []).map((reply:any) => ({
               id: reply.id,
               author: reply.user_id ? `@${reply.user_id.slice(0, 6)}` : 'Member',
               text: reply.comment ?? '',
