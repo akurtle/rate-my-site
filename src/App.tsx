@@ -125,7 +125,7 @@ function getTrendLabel(createdAt: string | null, reviews: number) {
 
 function clampScore(score: number) {
   if (!Number.isFinite(score)) return 0
-  return Math.max(0, Math.min(10, score))
+  return Math.max(0, Math.min(5, score))
 }
 
 function mapSiteRow(row: SiteRow): Site {
@@ -145,7 +145,7 @@ function mapSiteRow(row: SiteRow): Site {
     reviews,
     votes: reviews,
     trend: getTrendLabel(row.created_at, reviews),
-    featured: rating >= 9 || reviews >= 25,
+    featured: rating >= 4.5 || reviews >= 25,
     author: row.owner_id ? `@${row.owner_id.slice(0, 6)}` : 'Community',
     createdAt: row.created_at,
     screenshotUrl: row.screenshot_url ?? null,
@@ -295,7 +295,7 @@ function App() {
           rating: nextRating,
           reviews: nextReviews,
           votes: site.votes + 1,
-          featured: site.featured || nextRating >= 9,
+          featured: site.featured || nextRating >= 4.5,
         }
       }),
     )

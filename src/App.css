@@ -1075,7 +1075,7 @@ a:focus-visible {
 
 .number-grid {
   display: grid;
-  grid-template-columns: repeat(10, 36px);
+  grid-template-columns: repeat(5, 36px);
   gap: 6px;
 }
 

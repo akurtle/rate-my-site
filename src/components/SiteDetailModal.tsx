@@ -46,7 +46,7 @@ function SiteDetailModal({
 }: SiteDetailModalProps) {
   const [reviewText, setReviewText] = useState('')
   const [reviews, setReviews] = useState<Review[]>([])
-  const [ratingValue, setRatingValue] = useState(8)
+  const [ratingValue, setRatingValue] = useState(4)
   const [status, setStatus] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -222,8 +222,8 @@ function SiteDetailModal({
           <section className="rate-section" aria-labelledby="rate-heading">
             <h3 id="rate-heading">Rate This Site</h3>
             <form className="rate-form" onSubmit={handleSubmit}>
-              <div className="number-grid" role="radiogroup" aria-label="Rating from 1 to 10">
-                {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
+              <div className="number-grid" role="radiogroup" aria-label="Rating from 1 to 5">
+                {Array.from({ length: 5 }, (_, index) => index + 1).map((value) => (
                   <button
                     key={value}
                     type="button"
@@ -285,9 +285,9 @@ function SiteDetailModal({
 }
 
 function StarMeter({ score }: { score: number }) {
-  const filled = Math.max(0, Math.min(5, Math.round(score / 2)))
+  const filled = Math.max(0, Math.min(5, Math.round(score)))
   return (
-    <span className="star-meter" aria-label={`${score.toFixed(1)} out of 10`}>
+    <span className="star-meter" aria-label={`${score.toFixed(1)} out of 5`}>
       {Array.from({ length: 5 }, (_, index) => (
         <svg
           key={index}

@@ -75,8 +75,8 @@ function SiteCard({
 }
 
 function getScoreClass(score: number) {
-  if (score >= 9) return 'score-high'
-  if (score >= 8) return 'score-mid'
+  if (score >= 4.5) return 'score-high'
+  if (score >= 4) return 'score-mid'
   return 'score-low'
 }
 
