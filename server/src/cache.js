@@ -1,8 +1,9 @@
 import Redis from 'ioredis'
 
 const redisUrl = process.env.REDIS_URL
+const token = process.env.REDIS_TOKEN
 
-const redis = redisUrl ? new Redis(redisUrl, { maxRetriesPerRequest: 2 }) : null
+const redis = redisUrl ? new Redis(redisUrl,token ,{ maxRetriesPerRequest: 2 }) : null
 let redisReady = false
 
 if (redis) {
