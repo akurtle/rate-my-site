@@ -112,6 +112,10 @@ function displayUrl(url: string) {
   return url.replace(/^https?:\/\//, '').replace(/\/$/, '')
 }
 
+function categorySlug(category: Category) {
+  return normalizeKey(category)
+}
+
 function getTrendLabel(createdAt: string | null, reviews: number) {
   if (!createdAt) return 'New'
   const createdTime = new Date(createdAt).getTime()
@@ -334,9 +338,18 @@ function App() {
     document.getElementById('gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  const handleDiscoverSelect = () => {
+    setQuery('')
+    setActiveCategory('All')
+    setActiveTime('All Time')
+    setSortOption('Newest')
+    scrollToGallery()
+  }
+
   const handleTopRatedSelect = () => {
     setQuery('')
     setActiveCategory('All')
+    setActiveTime('All Time')
     setSortOption('Top Rated')
     scrollToGallery()
   }
@@ -346,6 +359,14 @@ function App() {
     setActiveCategory('All')
     setActiveTime('This Week')
     setSortOption('Most Voted')
+    scrollToGallery()
+  }
+
+  const handleCategoryLinkSelect = (category: Category) => {
+    setQuery('')
+    setActiveCategory(category)
+    setActiveTime('All Time')
+    setSortOption(category === 'All' ? 'Top Rated' : 'Most Voted')
     scrollToGallery()
   }
 
@@ -362,6 +383,7 @@ function App() {
         onSearchOpen={() => setIsSearchOpen(true)}
         onAuthOpen={() => setIsAuthOpen(true)}
         onSubmitOpen={() => setIsSubmitOpen(true)}
+        onDiscoverSelect={handleDiscoverSelect}
         onTopRatedSelect={handleTopRatedSelect}
         onCollectionsSelect={handleCollectionsSelect}
       />
@@ -371,7 +393,7 @@ function App() {
           <div className="hero-inner">
             <p className="hero-badge">* {totalVotes.toLocaleString()} LIVE RATINGS TRACKED</p>
             <h1 id="hero-title">
-              Design inspiration, <em>rated by the community.</em>
+              Rate My Site: website design reviews and feedback
             </h1>
             <p className="hero-subtitle">
               Rate website design, get site feedback, browse web design inspiration, and compare
@@ -401,6 +423,27 @@ function App() {
               </span>
             </div>
           </div>
+        </section>
+
+        <section className="internal-links-section" id="collections" aria-labelledby="collections-title">
+          <div>
+            <p className="section-kicker">* EXPLORE</p>
+            <h2 id="collections-title">Website design rating categories</h2>
+          </div>
+          <nav className="internal-link-grid" aria-label="Website rating categories">
+            {CATEGORIES.map((category) => (
+              <a
+                key={category}
+                href={`/?category=${categorySlug(category)}#gallery`}
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleCategoryLinkSelect(category)
+                }}
+              >
+                {category === 'All' ? 'All Website Reviews' : `${category} Website Reviews`}
+              </a>
+            ))}
+          </nav>
         </section>
 
         <FilterBar

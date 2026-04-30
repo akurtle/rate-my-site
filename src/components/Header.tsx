@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react'
 import { useAuth } from '../lib/auth'
 
 type HeaderProps = {
@@ -6,8 +7,14 @@ type HeaderProps = {
   onSearchOpen: () => void
   onAuthOpen: () => void
   onSubmitOpen: () => void
+  onDiscoverSelect: () => void
   onTopRatedSelect: () => void
   onCollectionsSelect: () => void
+}
+
+function handleNavClick(event: MouseEvent<HTMLAnchorElement>, action: () => void) {
+  event.preventDefault()
+  action()
 }
 
 function Header({
@@ -16,6 +23,7 @@ function Header({
   onSearchOpen,
   onAuthOpen,
   onSubmitOpen,
+  onDiscoverSelect,
   onTopRatedSelect,
   onCollectionsSelect,
 }: HeaderProps) {
@@ -35,11 +43,15 @@ function Header({
           </a>
 
           <nav className="header-nav" aria-label="Main navigation">
-            <a href="#gallery">Discover</a>
-            <button type="button" onClick={onTopRatedSelect}>
+            <a href="/?view=discover#gallery" onClick={(event) => handleNavClick(event, onDiscoverSelect)}>
+              Discover
+            </a>
+            <a href="/?view=top-rated#gallery" onClick={(event) => handleNavClick(event, onTopRatedSelect)}>
               Top Rated
-            </button>
-            <button type="button" onClick={onCollectionsSelect}>Collections</button>
+            </a>
+            <a href="/?view=collections#collections" onClick={(event) => handleNavClick(event, onCollectionsSelect)}>
+              Collections
+            </a>
           </nav>
         </div>
 
