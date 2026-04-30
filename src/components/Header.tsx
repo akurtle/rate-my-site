@@ -25,13 +25,9 @@ function Header({
       <div className="nav-shell">
         <div className="nav-left">
           <a className="brand" href="#gallery" aria-label="RateMySite home">
-            <span className="brand-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M12 3 20 7.5v9L12 21l-8-4.5v-9L12 3Z" fill="none" stroke="currentColor" strokeWidth="2" />
-                <path d="M8.6 9.5 12 7.6l3.4 1.9v4L12 15.4l-3.4-1.9v-4Z" fill="currentColor" />
-              </svg>
+            <span className="brand-mark brand-logo" aria-hidden="true">
+              <img src="/ratemysite-logo-dark.svg" alt="" />
             </span>
-            <span className="brand-name">RateMySite</span>
           </a>
 
           <nav className="header-nav" aria-label="Main navigation">
