@@ -1,4 +1,4 @@
-import type { Category, SortOption, TimeFilter } from '../App'
+import type { Category, SortOption, TimeFilter } from '../types'
 
 type FilterBarProps = {
   categories: readonly Category[]

@@ -1,5 +1,5 @@
 import type { KeyboardEvent } from 'react'
-import type { Site } from '../App'
+import type { Site } from '../types'
 import SiteThumbnail from './SiteThumbnail'
 
 type SiteCardProps = {

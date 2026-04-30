@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import type { Category } from '../App'
+import type { Category } from '../types'
 import { ApiError } from '../lib/api'
 
 type UploadPanelProps = {

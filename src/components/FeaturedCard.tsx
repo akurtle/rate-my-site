@@ -1,4 +1,4 @@
-import type { Site } from '../App'
+import type { Site } from '../types'
 
 type FeaturedCardProps = {
   site: Site

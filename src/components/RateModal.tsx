@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import type { Site } from '../App'
+import type { Site } from '../types'
 import { supabase } from '../lib/supabaseClient'
 import { createRating } from '../lib/api'
 

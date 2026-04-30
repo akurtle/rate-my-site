@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import type { Site } from '../App'
+import type { Site } from '../types'
 
 type SiteThumbnailProps = {
   site: Pick<Site, 'id' | 'name' | 'url' | 'screenshotUrl' | 'screenshots'>
