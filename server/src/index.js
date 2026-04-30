@@ -61,6 +61,7 @@ const siteSchema = z.object({
   url: z.preprocess(normalizeUrl, z.string().url()),
   description: z.string().trim().min(10).max(500),
   tags: z.array(z.string().trim().min(2).max(32)).min(1).max(8),
+  skipAutoScreenshot: z.boolean().optional(),
 })
 
 const ratingSchema = z.object({
@@ -80,8 +81,25 @@ const ratingsTtl = Number(process.env.CACHE_RATINGS_TTL || 30)
 const screenshotBucket = process.env.SCREENSHOT_BUCKET || 'site-screenshots'
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024, files: 6 },
+  limits: { fileSize: 5 * 1024 * 1024, files: 2 },
 })
+const uploadScreenshots = (req, res, next) => {
+  upload.array('screenshots', 2)(req, res, (error) => {
+    if (!error) {
+      next()
+      return
+    }
+    if (error instanceof multer.MulterError) {
+      const message =
+        error.code === 'LIMIT_FILE_COUNT' || error.code === 'LIMIT_UNEXPECTED_FILE'
+          ? 'Only two screenshots are allowed.'
+          : error.message
+      res.status(400).json({ error: message })
+      return
+    }
+    next(error)
+  })
+}
 
 const buildListCacheKey = (version, search, tag, sort) => {
   const safe = (value) => encodeURIComponent(value ?? 'all')
@@ -192,10 +210,11 @@ app.post('/sites', requireAuth, async (req, res) => {
     return res.status(400).json({ error: parseResult.error.flatten() })
   }
 
+  const { skipAutoScreenshot, ...siteData } = parseResult.data
   const { data, error } = await supabase
     .from('sites')
     .insert({
-      ...parseResult.data,
+      ...siteData,
       owner_id: req.user.id,
     })
     .select()
@@ -207,7 +226,7 @@ app.post('/sites', requireAuth, async (req, res) => {
   if (cacheEnabled) {
     await cacheBumpVersion(listVersionKey)
   }
-  if (data?.id && data?.url) {
+  if (!skipAutoScreenshot && data?.id && data?.url) {
     captureAndStoreScreenshot(data.id, data.url).catch((err) => {
       console.warn('[screenshot] failed:', err?.message ?? err)
     })
@@ -314,7 +333,7 @@ app.post('/sites/:id/screenshot', requireAuth, async (req, res) => {
   }
 })
 
-app.post('/sites/:id/screenshots', requireAuth, upload.array('screenshots', 6), async (req, res) => {
+app.post('/sites/:id/screenshots', requireAuth, uploadScreenshots, async (req, res) => {
   if (!requireSupabase(res)) return
   const { id } = req.params
   const { data: siteRow, error: siteError } = await supabase
@@ -333,6 +352,9 @@ app.post('/sites/:id/screenshots', requireAuth, upload.array('screenshots', 6), 
   const files = req.files ?? []
   if (!files.length) {
     return res.status(400).json({ error: 'No files uploaded.' })
+  }
+  if (files.length > 2) {
+    return res.status(400).json({ error: 'Only two screenshots are allowed.' })
   }
 
   const uploads = []
@@ -361,6 +383,8 @@ app.post('/sites/:id/screenshots', requireAuth, upload.array('screenshots', 6), 
   if (!uploads.length) {
     return res.status(400).json({ error: 'No valid images uploaded.' })
   }
+
+  await supabase.from('site_screenshots').delete().eq('site_id', id)
 
   const rows = uploads.map((url) => ({ site_id: id, url, source: 'manual' }))
   const { data, error } = await supabase.from('site_screenshots').insert(rows).select()

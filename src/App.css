@@ -1323,6 +1323,66 @@ a:focus-visible {
   color: oklch(0.1 0.01 265);
 }
 
+.screenshot-dropzone {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 86px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg3);
+  color: var(--muted);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.screenshot-dropzone:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.screenshot-dropzone input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.screenshot-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.screenshot-preview {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1.54 / 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg3);
+}
+
+.screenshot-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.screenshot-preview .icon-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  background: oklch(0.1 0.012 265 / 0.82);
+}
+
 .submit-actions .button {
   flex: 1;
 }

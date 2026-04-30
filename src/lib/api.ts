@@ -5,6 +5,7 @@ export type CreateSitePayload = {
   url: string
   description: string
   tags: string[]
+  skipAutoScreenshot?: boolean
 }
 
 export type CreateRatingPayload = {
@@ -139,7 +140,8 @@ export async function uploadScreenshots(
   })
 
   if (!response.ok) {
-    throw new Error('Failed to upload screenshots')
+    const errorBody = await safeParseError(response)
+    throw new ApiError(errorBody.message, errorBody.fields)
   }
   return response.json()
 }

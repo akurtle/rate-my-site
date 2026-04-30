@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import type { Category } from '../types'
 import { ApiError } from '../lib/api'
 
@@ -9,6 +9,7 @@ type UploadPanelProps = {
     url: string
     category: Exclude<Category, 'All'>
     description: string
+    screenshots: File[]
   }) => Promise<void>
   onClose: () => void
 }
@@ -18,12 +19,21 @@ function UploadPanel({ open, categories, onCreate, onClose }: UploadPanelProps) 
   const [url, setUrl] = useState('')
   const [category, setCategory] = useState<Exclude<Category, 'All'>>(categories[0] ?? 'Portfolio')
   const [description, setDescription] = useState('')
+  const [screenshots, setScreenshots] = useState<File[]>([])
   const [status, setStatus] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submittedUrl, setSubmittedUrl] = useState('')
 
   const canContinue = useMemo(() => url.trim().length > 0 && Boolean(category), [category, url])
   const canSubmit = description.trim().length >= 10 && !isSubmitting
+  const screenshotPreviews = useMemo(
+    () =>
+      screenshots.map((file) => ({
+        file,
+        url: URL.createObjectURL(file),
+      })),
+    [screenshots],
+  )
 
   useEffect(() => {
     if (!open) return
@@ -39,6 +49,33 @@ function UploadPanel({ open, categories, onCreate, onClose }: UploadPanelProps) 
     }
   }, [onClose, open])
 
+  useEffect(() => {
+    return () => {
+      screenshotPreviews.forEach((preview) => URL.revokeObjectURL(preview.url))
+    }
+  }, [screenshotPreviews])
+
+  const handleScreenshotChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files ?? []).filter((file) =>
+      file.type.startsWith('image/'),
+    )
+    setScreenshots((current) => {
+      const next = [...current, ...selectedFiles].slice(0, 2)
+      if (current.length + selectedFiles.length > 2) {
+        setStatus('Only two screenshots are allowed.')
+      } else {
+        setStatus('')
+      }
+      return next
+    })
+    event.target.value = ''
+  }
+
+  const handleRemoveScreenshot = (index: number) => {
+    setScreenshots((current) => current.filter((_, itemIndex) => itemIndex !== index))
+    setStatus('')
+  }
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     if (!canSubmit) return
@@ -49,6 +86,7 @@ function UploadPanel({ open, categories, onCreate, onClose }: UploadPanelProps) 
         url: url.trim(),
         category,
         description: description.trim(),
+        screenshots,
       })
       setSubmittedUrl(url.trim())
       setStep(3)
@@ -153,6 +191,44 @@ function UploadPanel({ open, categories, onCreate, onClose }: UploadPanelProps) 
                 }}
               />
             </label>
+            <div className="submit-field">
+              <span>Screenshots (max 2)</span>
+              <label className="screenshot-dropzone">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  multiple
+                  disabled={screenshots.length >= 2}
+                  onChange={handleScreenshotChange}
+                />
+                <span>{screenshots.length >= 2 ? 'Two screenshots selected' : 'Add screenshots'}</span>
+              </label>
+              {screenshotPreviews.length ? (
+                <div className="screenshot-preview-grid">
+                  {screenshotPreviews.map((preview, index) => (
+                    <div className="screenshot-preview" key={`${preview.file.name}-${index}`}>
+                      <img src={preview.url} alt={`Screenshot ${index + 1} preview`} />
+                      <button
+                        className="icon-button"
+                        type="button"
+                        onClick={() => handleRemoveScreenshot(index)}
+                        aria-label={`Remove screenshot ${index + 1}`}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M6 6l12 12M18 6l-12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <div className="submit-actions">
               <button className="button secondary" type="button" onClick={() => setStep(1)}>
                 Back

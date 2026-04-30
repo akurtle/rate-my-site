@@ -11,7 +11,7 @@ import SearchModal from './components/SearchModal'
 import SiteDetailModal from './components/SiteDetailModal'
 import UploadPanel from './components/UploadPanel'
 import { useSites } from './hooks/useSites'
-import { createSite } from './lib/api'
+import { createSite, uploadScreenshots } from './lib/api'
 import { initialDisplayOptions } from './lib/constants'
 import { clampScore, deriveNameFromUrl, mapSiteRow, sortSites } from './lib/siteUtils'
 import { supabase } from './lib/supabaseClient'
@@ -111,6 +111,7 @@ function App() {
     url: string
     category: Exclude<Category, 'All'>
     description: string
+    screenshots: File[]
   }) => {
     if (!supabase) {
       throw new Error('Supabase is not configured.')
@@ -127,10 +128,23 @@ function App() {
         url: payload.url.trim(),
         description: payload.description.trim(),
         tags: [payload.category],
+        skipAutoScreenshot: payload.screenshots.length > 0,
       },
       session.access_token,
     )
-    const newSite = mapSiteRow(response.data as SiteRow)
+    let newSite = mapSiteRow(response.data as SiteRow)
+    if (payload.screenshots.length) {
+      const uploadResponse = await uploadScreenshots(newSite.id, payload.screenshots, session.access_token)
+      const uploadedScreenshots = ((uploadResponse.data ?? []) as { url: string }[]).map((item) => item.url)
+      if (uploadedScreenshots.length) {
+        newSite = {
+          ...newSite,
+          screenshotUrl: uploadedScreenshots[0],
+          screenshotStatus: 'ready',
+          screenshots: uploadedScreenshots,
+        }
+      }
+    }
     setSites((prev) => [newSite, ...prev])
     setActiveCategory('All')
     setSortOption('Newest')
